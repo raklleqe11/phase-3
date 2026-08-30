@@ -632,7 +632,33 @@ let ui={sheet:null,sheetData:null,modal:null,expandedCategory:'popular',menuSear
 
 
 
-function save(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }
+function save(){
+ /* A guest on the public menu must never write the restaurant's record. Their
+    only preferences (language, display currency) live in a guest-scoped key. */
+ if(PUBLIC_CTX){ saveGuestPrefs(); return; }
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+/* ---------------- Guest-scoped preferences ----------------
+   Separate from STORAGE_KEY so the diner's choices are session data, not
+   restaurant data. Shape: { language, displayCurrency }. */
+function loadGuestPrefs(){
+ try{
+  const parsed=JSON.parse(localStorage.getItem(GUEST_KEY));
+  if(!parsed||typeof parsed!=='object') return {};
+  return {
+   language: typeof parsed.language==='string'?parsed.language:undefined,
+   displayCurrency: typeof parsed.displayCurrency==='string'?parsed.displayCurrency:undefined
+  };
+ }catch(e){ return {}; }
+}
+function saveGuestPrefs(){
+ try{
+  localStorage.setItem(GUEST_KEY,JSON.stringify({
+   language: state.preview.languageConfirmed?state.preview.language:undefined,
+   displayCurrency: ui.displayCurrency||undefined
+  }));
+ }catch(e){}
+}
 function logActivity(action,entityType,entityName,from=null,to=null){
  const ops=state.ops||(state.ops={}); const staff=ops.staff||[]; const actor=staff.find(s=>s.id===ops.actorId)||staff[0];
  ops.activity=ops.activity||[];
