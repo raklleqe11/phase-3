@@ -2,6 +2,7 @@
 (() => {
 'use strict';
 const STORAGE_KEY = 'hapPrototypeV4';
+const GUEST_KEY = 'hap.guest.v1';
 const app = document.getElementById('app');
 const toastLayer = document.getElementById('toast-layer');
 
@@ -291,7 +292,11 @@ function analyticsOf(){
  if(!Array.isArray(state.analytics.events)) state.analytics.events=[];
  return state.analytics;
 }
+/* Guest analytics count real diners only. The owner flipping into preview is
+   not traffic, so nothing is recorded outside the public menu context. */
+function isGuestTraffic(){ return PUBLIC_CTX; }
 function track(type,data={}){
+ if(!isGuestTraffic()) return;
  const a=analyticsOf();
  a.events.push({type,at:Date.now(),...data});
  if(a.events.length>ANALYTICS_LIMIT) a.events=a.events.slice(-ANALYTICS_LIMIT);
@@ -632,7 +637,33 @@ let ui={sheet:null,sheetData:null,modal:null,expandedCategory:'popular',menuSear
 
 
 
-function save(){ localStorage.setItem(STORAGE_KEY,JSON.stringify(state)); }
+function save(){
+ /* A guest on the public menu must never write the restaurant's record. Their
+    only preferences (language, display currency) live in a guest-scoped key. */
+ if(PUBLIC_CTX){ saveGuestPrefs(); return; }
+ localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+}
+/* ---------------- Guest-scoped preferences ----------------
+   Separate from STORAGE_KEY so the diner's choices are session data, not
+   restaurant data. Shape: { language, displayCurrency }. */
+function loadGuestPrefs(){
+ try{
+  const parsed=JSON.parse(localStorage.getItem(GUEST_KEY));
+  if(!parsed||typeof parsed!=='object') return {};
+  return {
+   language: typeof parsed.language==='string'?parsed.language:undefined,
+   displayCurrency: typeof parsed.displayCurrency==='string'?parsed.displayCurrency:undefined
+  };
+ }catch(e){ return {}; }
+}
+function saveGuestPrefs(){
+ try{
+  localStorage.setItem(GUEST_KEY,JSON.stringify({
+   language: state.preview.languageConfirmed?state.preview.language:undefined,
+   displayCurrency: ui.displayCurrency||undefined
+  }));
+ }catch(e){}
+}
 function logActivity(action,entityType,entityName,from=null,to=null){
  const ops=state.ops||(state.ops={}); const staff=ops.staff||[]; const actor=staff.find(s=>s.id===ops.actorId)||staff[0];
  ops.activity=ops.activity||[];
@@ -1028,10 +1059,27 @@ function landingPage(){
 }
 
 
+/* A render replaces the scroll containers, which would otherwise reset the
+   guest or owner to the top of the page on every tap. The offsets are captured
+   before the rebuild and restored right after it. */
+let scrollMemory={page:0,sheet:0};
+function captureScroll(){
+ scrollMemory={
+  page:document.querySelector('.content-scroll')?.scrollTop||0,
+  sheet:document.querySelector('.sheet')?.scrollTop||0
+ };
+}
+function restoreScroll(){
+ const page=document.querySelector('.content-scroll');
+ if(page&&scrollMemory.page) page.scrollTop=scrollMemory.page;
+ const sheet=document.querySelector('.sheet');
+ if(sheet&&scrollMemory.sheet) sheet.scrollTop=scrollMemory.sheet;
+}
 function render(){
  prunePromotions();
  setTheme();
  stopLandingDemo();
+ captureScroll();
  if(PUBLIC_CTX){
   const body = renderPreview();
   app.innerHTML=`<div class="app-stage"><div class="phone-app">${body}${renderOverlays()}</div></div>`;
@@ -1131,19 +1179,20 @@ function renderAdminCategory(c){
 function renderAdminItem(i,c){
  const statusLabel=i.status==='available'?'Available':i.status==='soldout'?'Sold out':'Hidden';
  const promoted=isPromoLive(i.promotion);
- return `<div class="admin-item ${i.status==='soldout'?'is-soldout':''}"><img class="admin-item-img" src="${i.image}" alt=""><div class="admin-item-copy"><strong>${escapeHtml(i.name)}${promoted?'<i class="promo-dot" aria-label="Promoted"></i>':''}</strong><span><i class="status-dot ${i.status}"></i>${statusLabel} · ${money(i.price)}</span></div><button class="mini-icon" data-tour="promote" data-action="item-actions" data-id="${i.id}" aria-label="Actions for ${escapeHtml(i.name)}">${icon('more',16)}</button></div>`;
+ return `<div class="admin-item ${i.status==='soldout'?'is-soldout':''}"><img class="admin-item-img" src="${i.image}" alt="${escapeHtml(i.name)}"><div class="admin-item-copy"><strong>${escapeHtml(i.name)}${promoted?'<i class="promo-dot" aria-label="Promoted"></i>':''}</strong><span><i class="status-dot ${i.status}"></i>${statusLabel} · ${itemPriceLabel(i)}</span></div><button class="mini-icon" data-tour="promote" data-action="item-actions" data-id="${i.id}" aria-label="Actions for ${escapeHtml(i.name)}">${icon('more',16)}</button></div>`;
 }
 /* One promotions surface: everything live, with edit and end on each row. */
 function adminPromote(){
  prunePromotions();
  const list=getPromotions();
  const itemCount=list.filter(x=>x.kind==='item').length;
- return `<div class="page-head"><div><div class="eyebrow">Attention without noise</div><h1 class="page-title">Promote</h1><p class="page-subtitle">${list.length?`${list.length} live`:'Nothing live right now'}</p></div><button class="icon-btn" data-action="promo-chooser" aria-label="New promotion">${icon('plus',20)}</button></div>
+ return `<div class="page-head"><div><div class="eyebrow">Attention without noise</div><h1 class="page-title">Promote</h1><p class="page-subtitle">${list.length?`${list.length} live`:'Nothing live right now'}</p></div></div>
+ <button class="btn primary full" style="margin-bottom:12px" data-action="promo-chooser">${icon('plus',16)} New promotion</button>
  ${itemCount>3?`<div class="promo-warn">${itemCount} promotions active — the menu stops feeling special.</div>`:''}
  ${list.length?`<div class="promo-manager">${list.map(row=>row.kind==='item'
-  ? `<div class="card promo-row"><img src="${row.item.image}" alt=""><div class="promo-row-copy"><strong>${escapeHtml(row.item.name)}</strong><span>${escapeHtml(row.promotion.label||'Promoted')} · ${escapeHtml(promoStyleName(row.promotion.style))} · ${escapeHtml(promoEndsLabel(row.promotion))}</span></div><div class="promo-row-actions"><button class="btn small soft" data-action="promote-item" data-id="${row.item.id}">Edit</button><button class="btn small" data-action="end-promotion" data-kind="item" data-id="${row.item.id}">End</button></div></div>`
+  ? `<div class="card promo-row"><img src="${row.item.image}" alt="${escapeHtml(row.item.name)}"><div class="promo-row-copy"><strong>${escapeHtml(row.item.name)}</strong><span>${escapeHtml(row.promotion.label||'Promoted')} · ${escapeHtml(promoStyleName(row.promotion.style))} · ${escapeHtml(promoEndsLabel(row.promotion))}</span></div><div class="promo-row-actions"><button class="btn small soft" data-action="promote-item" data-id="${row.item.id}">Edit</button><button class="btn small" data-action="end-promotion" data-kind="item" data-id="${row.item.id}">End</button></div></div>`
   : `<div class="card promo-row is-category"><div class="promo-row-icon">${icon('menu',18)}</div><div class="promo-row-copy"><strong>${escapeHtml(row.category.name)}</strong><span>Category · ${escapeHtml(row.promotion.label||'Featured')} · ${escapeHtml(promoEndsLabel(row.promotion))}</span></div><div class="promo-row-actions"><button class="btn small soft" data-action="promote-category" data-id="${row.category.id}">Edit</button><button class="btn small" data-action="end-promotion" data-kind="category" data-id="${row.category.id}">End</button></div></div>`
- ).join('')}</div>`:`<div class="card empty">Nothing is promoted. Tap ${'+'} to feature a dish or a whole section.</div>`}
+ ).join('')}</div>`:`<div class="card empty">Nothing is promoted. Use “New promotion” to feature a dish or a whole section.</div>`}
  <section class="section"><div class="section-row"><div><div class="section-title">How promotions read</div><div class="page-subtitle">Five compositions. Each one keeps the price protected.</div></div></div><div class="settings-list">${PROMO_STYLES.map(([id,n,desc])=>`<div class="card settings-row"><div class="settings-icon">${icon('spark',17)}</div><div class="settings-copy"><strong>${escapeHtml(n)}</strong><span>${escapeHtml(desc)}</span></div></div>`).join('')}</div></section>`;
 }
 function tplMini(id){
@@ -1416,9 +1465,9 @@ function renderPreview(){
    <div class="public-banner">${r.banner?`<img src="${escapeHtml(r.banner)}" alt="${escapeHtml(r.name)} restaurant">`:`<div class="banner-placeholder">${icon('image',22)}<span>Banner image</span></div>`}
     <div class="public-head-actions"><button class="public-head-btn" data-action="language-sheet" aria-label="Language">${icon('globe',17)}</button></div>
    </div>
-   <div class="restaurant-line"><div class="public-avatar">${r.avatar?`<img src="${escapeHtml(r.avatar)}" alt="">`:`<span class="avatar-placeholder">${icon('image',20)}</span>`}</div><div class="restaurant-copy"><h1>${escapeHtml(r.name)}</h1><div class="restaurant-meta"><span class="open-chip"><i></i>${escapeHtml(r.status)}</span>${hoursDisclosure()}</div></div></div>
+   <div class="restaurant-line"><div class="public-avatar">${r.avatar?`<img src="${escapeHtml(r.avatar)}" alt="${escapeHtml(r.name)} logo">`:`<span class="avatar-placeholder">${icon('image',20)}</span>`}</div><div class="restaurant-copy"><h1>${escapeHtml(r.name)}</h1><div class="restaurant-meta"><span class="open-chip"><i></i>${escapeHtml(r.status)}</span>${hoursDisclosure()}</div></div></div>
    <label class="public-search">${icon('search',17)}<input id="public-search-input" value="${escapeHtml(ui.menuSearch)}" placeholder="Search the menu" autocomplete="off"><span class="lang-code lang-indicator" aria-label="Current language ${escapeHtml(state.preview.language)}">${escapeHtml(code)}</span></label></header>
-   ${p&&p.item.promotion.intensity==='strong'&&!state.preview.strongDismissed?`<button class="strong-promo-card reveal-item" data-action="scroll-item" data-id="${p.item.id}"><img src="${p.item.image}" alt=""><div><b>${escapeHtml(p.item.promotion.label)}</b><strong>${escapeHtml(tItem(p.item).name)}</strong><span>${escapeHtml(tItem(p.item).ingredients)}</span></div>${icon('chevron',18)}</button>`:''}
+   ${p&&p.item.promotion.intensity==='strong'&&!state.preview.strongDismissed?`<button class="strong-promo-card reveal-item" data-action="scroll-item" data-id="${p.item.id}"><img src="${p.item.image}" alt="${escapeHtml(tItem(p.item).name)}"><div><b>${escapeHtml(p.item.promotion.label)}</b><strong>${escapeHtml(tItem(p.item).name)}</strong><span>${escapeHtml(tItem(p.item).ingredients)}</span></div>${icon('chevron',18)}</button>`:''}
    <div class="category-sticky" id="category-sticky"><div class="menu-toolbar"><nav class="category-strip" id="category-strip">${visibleCategories().map((c,idx)=>`<button class="category-chip ${idx===0?'active':''} ${isPromotedCategory(c)?'is-featured':''}" data-action="jump-category" data-id="${c.id}">${escapeHtml(tCategory(c))}</button>`).join('')}</nav><div class="toolbar-actions">${currencyToggle()}<button class="filter-btn ${(ui.dietFilter||'all')!=='all'?'active':''}" data-action="filters-sheet" aria-label="Filters and allergen key">${icon('menu',13)}<span>Filters</span></button></div></div></div>
    <main class="menu-sections">${visibleCategories().length?visibleCategories().map((c,ci)=>renderPublicCategory(c,ci)).join(''):`<div class="card empty" style="margin:16px">No dishes match that filter.</div>`}</main>
   </div></div>`;
@@ -1500,10 +1549,13 @@ function renderPublicItem(i,c,idx,opts){
   style==='editorial'?`<span class="promo-kicker-line">${label}</span>`:
   style==='offer'?`<span class="promo-strip-label">${label}</span>`:
   `<span class="promo-notch">${label}</span>`;
- const footer=promoted&&style==='offer'
-  ? `<div class="promo-offer-strip"><span class="offer-terms">${p.terms?`Offer includes · ${escapeHtml(p.terms)}`:'Offer available now'}</span><span class="offer-price">${p.wasPrice?`<s>${money(Number(p.wasPrice))}</s>`:''}<strong>${menuPrice(i.price)}</strong></span></div>`
+ /* The offer style prints the price inside its own strip, so the card must not
+    also render the price column — one price per card, never two. */
+ const isOffer=promoted&&style==='offer';
+ const footer=isOffer
+  ? `<div class="promo-offer-strip"><span class="offer-terms">${p.terms?`Offer includes · ${escapeHtml(p.terms)}`:'Offer available now'}</span><span class="offer-price">${p.wasPrice?`<s>${money(Number(p.wasPrice))}</s>`:''}<strong>${menuPrice(itemPrice(i))}</strong>${itemVariants(i).length>1?'<em class="offer-from">from</em>':''}</span></div>`
   : '';
- return `<article class="menu-product reveal-item ${promoted?`is-promoted promo-${p.intensity||'subtle'} promo-style-${style}`:''} ${i.status==='hidden'?'hidden-item':''}" data-item-id="${i.id}" data-search="${escapeHtml((tr.name+' '+ing+' '+tCategory(c)).toLowerCase())}" style="transition-delay:${Math.min(idx%5*35,140)}ms">${chrome}<img class="product-img" src="${i.image}" alt="${escapeHtml(tr.name)}" loading="lazy"><div class="product-copy"><h3>${escapeHtml(tr.name)}</h3>${ing?`<p>${escapeHtml(ing)}</p>`:''}${itemBadges(i,{interactive:!opts||!opts.static})}</div>${priceColumn(i,{showWas:style!=='offer'})}${footer}${i.status==='soldout'?`<div class="product-status">Sold out</div>`:''}</article>`;
+ return `<article class="menu-product reveal-item ${promoted?`is-promoted promo-${p.intensity||'subtle'} promo-style-${style}`:''} ${i.status==='hidden'?'hidden-item':''}" data-item-id="${i.id}" data-search="${escapeHtml((tr.name+' '+ing+' '+tCategory(c)).toLowerCase())}" style="transition-delay:${Math.min(idx%5*35,140)}ms">${chrome}<img class="product-img" src="${i.image}" alt="${escapeHtml(tr.name)}" loading="lazy"><div class="product-copy"><h3>${escapeHtml(tr.name)}</h3>${ing?`<p>${escapeHtml(ing)}</p>`:''}${itemBadges(i,{interactive:!opts||!opts.static})}</div>${isOffer?'':priceColumn(i)}${footer}${i.status==='soldout'?`<div class="product-status">Sold out</div>`:''}</article>`;
 }
 
 
@@ -1591,10 +1643,15 @@ function itemDetailsSheet(){
  if(!f) return '';
  const i=f.item, tr=tItem(i);
  const al=itemAllergens(i), di=itemDiets(i), sp=Number(i.spice)||0;
- const approx=approxPrice(i.price);
+ const price=itemPrice(i);
+ const approx=approxPrice(price);
+ const vs=itemVariants(i);
  return sheetShell(escapeHtml(tr.name),escapeHtml(tCategory(f.category)),
   `<div class="detail-sheet">
-   <div class="detail-price-block"><b class="detail-price-main">${menuPrice(i.price)}</b>${approx?`<span class="detail-price-approx">${approx}</span>`:''}</div>
+   ${i.image?`<img class="detail-hero" src="${escapeHtml(i.image)}" alt="${escapeHtml(tr.name)}" loading="lazy">`:`<div class="detail-hero detail-hero-empty" aria-hidden="true">${icon('menu',22)}</div>`}
+   ${vs.length>1
+    ? `<div class="detail-variants">${vs.map(v=>{const ap=approxPrice(v.price); return `<div class="detail-variant"><span>${escapeHtml(v.name)}</span><b>${menuPrice(v.price)}${ap?`<small>${ap}</small>`:''}</b></div>`;}).join('')}</div>`
+    : `<div class="detail-price-block"><b class="detail-price-main">${menuPrice(price)}</b>${approx?`<span class="detail-price-approx">${approx}</span>`:''}</div>`}
    ${tr.ingredients?`<p class="detail-ingredients">${escapeHtml(tr.ingredients)}</p>`:''}
    ${di.length||sp>0?`<div class="detail-tags">${di.map(d=>`<span class="detail-tag">${escapeHtml((DIETS.find(x=>x[0]===d)||[,d])[1])}</span>`).join('')}${sp>0?`<span class="detail-tag hot">${escapeHtml(SPICE_LABELS[sp]||'Spicy')}</span>`:''}</div>`:''}
    <div class="detail-block">
@@ -1612,11 +1669,34 @@ function displayCurrencySheet(){
   `<div class="fx-list">${options.map(c=>`<button class="fx-row fx-row-btn ${c===code?'active':''}" data-action="set-display-currency" data-code="${c}"><div class="fx-row-copy"><strong>${c}</strong><span>${escapeHtml((CURRENCIES[c]||{}).name||c)}</span></div><div class="fx-row-value">${c===cur.primary?'Menu price':'Approximate'}${c===code?icon('check',15):''}</div></button>`).join('')}</div>
   <p class="fx-note">You always pay in ${escapeHtml(cur.primary)}.</p>`);
 }
+/* Price block for the item editor: one price, or an ordered variant list.
+   The mode follows the data, so an item seeded with variants opens on the
+   variant editor instead of a single field that would wipe them. */
+function priceModeField(item){
+ const cur=currencyOf().primary;
+ const rows=draftVariants(item);
+ const variantMode=rows.length>0;
+ const toggle=`<div class="field"><label>Pricing</label><div class="segment-control" role="group" aria-label="Pricing mode">
+  <button type="button" class="${variantMode?'':'active'}" aria-pressed="${!variantMode}" data-action="item-price-mode" data-mode="single" data-id="${item.id}">Single price</button>
+  <button type="button" class="${variantMode?'active':''}" aria-pressed="${variantMode}" data-action="item-price-mode" data-mode="variants" data-id="${item.id}">Variants</button>
+ </div></div>`;
+ if(!variantMode){
+  return `${toggle}<div class="field"><label>Price (${cur})</label><input name="price" type="number" min="0" step="0.1" value="${item.price}"></div>`;
+ }
+ return `${toggle}<div class="field"><label>Variants (${cur})</label><div class="variant-list">${rows.map((v,idx)=>`<div class="variant-row">
+   <input name="variantName" value="${escapeHtml(v.name||'')}" placeholder="e.g. Small" aria-label="Variant ${idx+1} name">
+   <input name="variantPrice" type="number" min="0" step="0.1" value="${Number(v.price)||0}" aria-label="Variant ${idx+1} price">
+   <button type="button" class="icon-btn variant-del" data-action="variant-remove" data-idx="${idx}" data-id="${item.id}" aria-label="Remove variant ${idx+1}">${icon('trash',15)}</button>
+  </div>`).join('')}</div>
+  <button type="button" class="btn full" data-action="variant-add" data-id="${item.id}">${icon('plus',15)} Add variant</button>
+  <small class="field-hint">Guests see the cheapest variant as “from”, and the full list when they open the dish.</small></div>`;
+}
 function editItemSheet(){
  const found=getItem(ui.sheetData?.id); if(!found) return ''; const {item,category}=found;
- return sheetShell('Edit item',category.name,`<form id="edit-item-form" class="form-grid"><input type="hidden" name="id" value="${item.id}"><div class="field"><label>Name</label><input name="name" value="${escapeHtml(item.name)}" required></div><div class="field"><label>Ingredients</label><input name="ingredients" value="${escapeHtml(itemIngredients(item))}" maxlength="90" placeholder="Tomato, mozzarella, basil"><small class="field-hint">Short list shown under the name on the public menu.</small></div><div class="form-row"><div class="field"><label>Price (${currencyOf().primary})</label><input name="price" type="number" min="0" step="0.1" value="${item.price}"></div><div class="field"><label>Category</label><select name="category">${state.categories.map(c=>`<option value="${c.id}" ${c.id===category.id?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}</select></div></div>${photoPresetField(item.image)}${statusField(item.status)}${dietaryFields(item)}<button class="btn primary full" type="button" data-action="save-item-form">Save changes</button><div class="form-row" style="margin-top:8px"><button class="btn full" type="button" data-action="duplicate-item" data-id="${item.id}">${icon('copy',15)} Duplicate</button><button class="btn danger full" type="button" data-action="delete-item" data-id="${item.id}">${icon('trash',15)} Delete</button></div></form>`);
+ return sheetShell('Edit item',category.name,`<form id="edit-item-form" class="form-grid"><input type="hidden" name="id" value="${item.id}"><div class="field"><label>Name</label><input name="name" value="${escapeHtml(item.name)}" required></div><div class="field"><label>Ingredients</label><input name="ingredients" value="${escapeHtml(itemIngredients(item))}" maxlength="90" placeholder="Tomato, mozzarella, basil"><small class="field-hint">Short list shown under the name on the public menu.</small></div>${priceModeField(item)}<div class="field"><label>Category</label><select name="category">${state.categories.map(c=>`<option value="${c.id}" ${c.id===category.id?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}</select></div>${photoPresetField(item.image)}${statusField(item.status)}${dietaryFields(item)}<button class="btn primary full" type="button" data-action="save-item-form">Save changes</button><div class="form-row" style="margin-top:8px"><button class="btn full" type="button" data-action="duplicate-item" data-id="${item.id}">${icon('copy',15)} Duplicate</button><button class="btn danger full" type="button" data-action="delete-item" data-id="${item.id}">${icon('trash',15)} Delete</button></div></form>`);
 }
-function addItemSheet(){ const cat=ui.sheetData?.category||state.categories[0].id; return sheetShell('Add menu item','Photo, name, ingredients, price.',`<form id="add-item-form" class="form-grid"><div class="field"><label>Name</label><input name="name" required placeholder="e.g. Wild Mushroom Risotto"></div><div class="field"><label>Ingredients</label><input name="ingredients" maxlength="90" placeholder="Arborio rice, mushrooms, parmesan"><small class="field-hint">Short list shown under the name on the public menu.</small></div><div class="form-row"><div class="field"><label>Price (${currencyOf().primary})</label><input name="price" type="number" step="0.1" value="950"></div><div class="field"><label>Category</label><select name="category">${state.categories.map(c=>`<option value="${c.id}" ${c.id===cat?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}</select></div></div>${photoPresetField(null)}${statusField('available')}${dietaryFields(null)}<button class="btn primary full" type="button" data-tour="sheet-primary" data-action="save-add-item">Add item</button></form>`); }
+function addItemSheet(){ if(!state.categories.length) return sheetShell('Add menu item','A dish needs a category.','<div class="card empty">Create a category first, then add dishes to it.</div>');
+ const cat=ui.sheetData?.category||state.categories[0].id; return sheetShell('Add menu item','Photo, name, ingredients, price.',`<form id="add-item-form" class="form-grid"><div class="field"><label>Name</label><input name="name" required placeholder="e.g. Wild Mushroom Risotto"></div><div class="field"><label>Ingredients</label><input name="ingredients" maxlength="90" placeholder="Arborio rice, mushrooms, parmesan"><small class="field-hint">Short list shown under the name on the public menu.</small></div><div class="form-row"><div class="field"><label>Price (${currencyOf().primary})</label><input name="price" type="number" step="0.1" value="950"></div><div class="field"><label>Category</label><select name="category">${state.categories.map(c=>`<option value="${c.id}" ${c.id===cat?'selected':''}>${escapeHtml(c.name)}</option>`).join('')}</select></div></div>${photoPresetField(null)}${statusField('available')}${dietaryFields(null)}<button class="btn primary full" type="button" data-tour="sheet-primary" data-action="save-add-item">Add item</button></form>`); }
 function addCategorySheet(){ return sheetShell('Add category','Keep category names short and scannable.',`<form id="add-category-form" class="form-grid"><div class="field"><label>Category name</label><input name="name" required placeholder="e.g. Breakfast"></div><button class="btn primary full" type="button" data-action="save-add-category">Add category</button></form>`); }
 function addChooserSheet(){
  return sheetShell('Add to your menu','What would you like to add?',`<div class="choice-grid"><button class="choice" data-action="open-add-item"><strong>${icon('plus',15)} Add item</strong><span>A dish with photo, price, allergens</span></button><button class="choice" data-action="open-add-category"><strong>${icon('menu',15)} Add category</strong><span>A new section, like Breakfast</span></button></div>`);
@@ -1664,27 +1744,30 @@ function promoteCategorySheet(){
  <button class="btn primary full" data-action="save-category-promotion" data-id="${c.id}">Save promotion</button>${p.active?`<button class="btn full" style="margin-top:8px" data-action="end-promotion" data-kind="category" data-id="${c.id}">End promotion</button>`:''}`);
 }
 function promoChooserSheet(){
+ if(!state.categories.length) return sheetShell('New promotion','Nothing to promote yet.','<div class="card empty">Add a category and a dish first, then come back to feature it.</div>');
  return sheetShell('New promotion','Feature one dish, or a whole section.',`
- <div class="sheet-section"><div class="sheet-label">Promote a dish</div><div class="settings-list">${allItems().map(i=>`<button class="card settings-row" data-action="promote-item" data-id="${i.id}"><div class="settings-icon">${icon('spark',17)}</div><div class="settings-copy"><strong>${escapeHtml(i.name)}</strong><span>${money(i.price)}${isPromoLive(i.promotion)?' · already promoted':''}</span></div>${icon('chevron',15)}</button>`).join('')}</div></div>
+ <div class="sheet-section"><div class="sheet-label">Promote a dish</div><div class="settings-list">${!allItems().length?'<div class="card empty">No dishes yet.</div>':allItems().map(i=>`<button class="card settings-row" data-action="promote-item" data-id="${i.id}"><div class="settings-icon">${icon('spark',17)}</div><div class="settings-copy"><strong>${escapeHtml(i.name)}</strong><span>${itemPriceLabel(i)}${isPromoLive(i.promotion)?' · already promoted':''}</span></div>${icon('chevron',15)}</button>`).join('')}</div></div>
  <div class="sheet-section"><div class="sheet-label">Promote a category</div><div class="settings-list">${state.categories.map(c=>`<button class="card settings-row" data-action="promote-category" data-id="${c.id}"><div class="settings-icon">${icon('menu',17)}</div><div class="settings-copy"><strong>${escapeHtml(c.name)}</strong><span>${c.items.length} items${isPromotedCategory(c)?' · already featured':''}</span></div>${icon('chevron',15)}</button>`).join('')}</div></div>`);
 }
 function bulkAvailabilitySheet(){
  const items=allItems();
  return sheetShell('Mark sold out','Tap the dishes that ran out, then save once.',`
- <div class="bulk-list">${items.map(i=>{const st=(ui.sheetData.temp||{})[i.id]??i.status;return `<button class="bulk-row ${st==='soldout'?'is-soldout':''}" data-action="bulk-toggle" data-id="${i.id}"><img src="${i.image}" alt=""><div class="bulk-copy"><strong>${escapeHtml(i.name)}</strong><span>${st==='soldout'?'Sold out':st==='hidden'?'Hidden':'Available'}</span></div><i class="bulk-box">${st==='soldout'?icon('check',13):''}</i></button>`;}).join('')}</div>
+ <div class="bulk-list">${items.map(i=>{const st=(ui.sheetData.temp||{})[i.id]??i.status;return `<button class="bulk-row ${st==='soldout'?'is-soldout':''}" data-action="bulk-toggle" data-id="${i.id}"><img src="${i.image}" alt="${escapeHtml(i.name)}"><div class="bulk-copy"><strong>${escapeHtml(i.name)}</strong><span>${st==='soldout'?'Sold out':st==='hidden'?'Hidden':'Available'}</span></div><i class="bulk-box">${st==='soldout'?icon('check',13):''}</i></button>`;}).join('')}</div>
  <button class="btn primary full" style="margin-top:12px" data-action="save-bulk-availability">Save availability</button>`);
 }
 function bulkPriceSheet(){
  const cur=currencyOf().primary;
  return sheetShell('Update prices',`Every dish in ${escapeHtml(cur)}. Changes save as you go.`,`
- <div class="bulk-list">${allItems().map(i=>`<div class="bulk-row static"><img src="${i.image}" alt=""><div class="bulk-copy"><strong>${escapeHtml(i.name)}</strong><span>${escapeHtml(cur)}</span></div><input class="bulk-price" type="number" step="0.01" min="0" value="${escapeHtml(String(i.price))}" data-action="bulk-price-input" data-id="${i.id}" aria-label="Price for ${escapeHtml(i.name)}"></div>`).join('')}</div>
+ <div class="bulk-list">${allItems().map(i=>`<div class="bulk-row static"><img src="${i.image}" alt="${escapeHtml(i.name)}"><div class="bulk-copy"><strong>${escapeHtml(i.name)}</strong><span>${hasVariants(i)?`${itemVariants(i).length} variants`:escapeHtml(cur)}</span></div>${hasVariants(i)
+  ? `<span class="bulk-variant-note">${itemPriceLabel(i)}</span>`
+  : `<input class="bulk-price" type="number" step="0.01" min="0" value="${escapeHtml(String(i.price))}" data-action="bulk-price-input" data-id="${i.id}" aria-label="Price for ${escapeHtml(i.name)}">`}</div>`).join('')}</div>
  <button class="btn primary full" style="margin-top:12px" data-action="close-sheet">Done</button>`);
 }
 function itemActionsSheet(){
  const f=getItem(ui.sheetData?.id); if(!f) return '';
  const i=f.item;
  const rows=[['edit-item','Edit',icon('edit',17)],['cycle-status','Availability',icon('eyeOff',17)],['promote-item','Promote',icon('spark',17)],['move-item-up','Move up',icon('up',17)],['move-item-down','Move down',icon('down',17)]];
- return sheetShell(escapeHtml(i.name),`${escapeHtml(f.category.name)} · ${money(i.price)}`,`
+ return sheetShell(escapeHtml(i.name),`${escapeHtml(f.category.name)} · ${itemPriceLabel(i)}`,`
  <div class="settings-list">${rows.map(([a,n,ic])=>`<button class="card settings-row" data-action="${a}" data-id="${i.id}" data-dir="${a==='move-item-up'?'up':'down'}"><div class="settings-icon">${ic}</div><div class="settings-copy"><strong>${n}</strong></div>${icon('chevron',15)}</button>`).join('')}
  <button class="card settings-row" data-action="delete-item" data-id="${i.id}"><div class="settings-icon">${icon('trash',17)}</div><div class="settings-copy"><strong style="color:var(--danger)">Delete</strong></div></button></div>`);
 }
@@ -1694,7 +1777,7 @@ function restaurantDetailSheet(){
 }
 function renderSpecialModal(){
  const p=getPromoted(); if(!p) return '';
- return `<div class="overlay"></div><div class="special-modal"><button class="close-btn" style="position:absolute;right:14px;top:14px" data-action="close-modal">${icon('close',18)}</button><span class="modal-badge">${icon('spark',13)} ${escapeHtml(p.item.promotion.label)}</span><h2>${escapeHtml(p.item.name)}</h2><p>Something worth noticing — just for tonight.</p><img src="${p.item.image}" alt=""><p>${escapeHtml(itemIngredients(p.item))}</p><div class="price">${money(p.item.price)}</div><button class="btn primary full" data-action="view-special" data-id="${p.item.id}">View on menu ${icon('chevron',15)}</button><button class="btn full" style="margin-top:7px" data-action="close-modal">Maybe later</button></div>`;
+ return `<div class="overlay"></div><div class="special-modal"><button class="close-btn" style="position:absolute;right:14px;top:14px" data-action="close-modal">${icon('close',18)}</button><span class="modal-badge">${icon('spark',13)} ${escapeHtml(p.item.promotion.label)}</span><h2>${escapeHtml(p.item.name)}</h2><p>Something worth noticing — just for tonight.</p><img src="${p.item.image}" alt="${escapeHtml(p.item.name)}"><p>${escapeHtml(itemIngredients(p.item))}</p><div class="price">${itemPriceLabel(p.item)}</div><button class="btn primary full" data-action="view-special" data-id="${p.item.id}">View on menu ${icon('chevron',15)}</button><button class="btn full" style="margin-top:7px" data-action="close-modal">Maybe later</button></div>`;
 }
 function renderConfirmModal(){
  const c=ui.confirm;
@@ -1703,6 +1786,7 @@ function renderConfirmModal(){
 
 function postRender(){
  document.documentElement.style.setProperty('--brand',state.appearance.brand);
+ restoreScroll();
  if(ui.sheet || ui.modal || ui.confirm){
   const overlay = document.querySelector('.sheet, .special-modal, .confirm-modal');
   if(overlay){
@@ -1875,8 +1959,8 @@ app.addEventListener('click',e=>{
   if(btn.dataset.mode==='variants'){ if(!hasVariants(f.item)) f.item.variants=[{name:'Small',price:itemPrice(f.item)||0},{name:'Large',price:Math.round((itemPrice(f.item)||0)*1.4)}]; }
   else { f.item.price=itemPrice(f.item); f.item.variants=[]; }
   save(); render(); return; }
- if(a==='variant-add'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); f.item.variants=[...itemVariants(f.item),{name:'',price:0}]; save(); render(); return; }
- if(a==='variant-remove'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); const idx=Number(btn.dataset.idx); const list=itemVariants(f.item).filter((_,i)=>i!==idx); f.item.variants=list; if(!list.length) f.item.price=itemPrice(f.item); save(); render(); return; }
+ if(a==='variant-add'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); f.item.variants=[...draftVariants(f.item),{name:'',price:0}]; save(); render(); return; }
+ if(a==='variant-remove'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); const idx=Number(btn.dataset.idx); const list=draftVariants(f.item).filter((_,i)=>i!==idx); f.item.variants=list; if(!list.length) f.item.price=itemPrice(f.item); save(); render(); return; }
  if(a==='save-add-item'){ saveAddItemForm(); return; }
  if(a==='save-add-category'){ saveAddCategoryForm(); return; }
  if(a==='end-promotion'){ endPromotion(btn.dataset.kind||'item',btn.dataset.id); return; }
@@ -1978,6 +2062,29 @@ function formVariants(form){
   name:String(row.querySelector('[name="variantName"]')?.value||'').trim()||`Option ${idx+1}`,
   price:Number(row.querySelector('[name="variantPrice"]')?.value)||0
  }));
+}
+/** Every variant row as typed, including rows still missing a name. */
+function draftVariants(i){ return Array.isArray(i&&i.variants)?i.variants.filter(v=>v&&typeof v==='object'):[]; }
+/** Reads the raw variant rows without inventing names for blank ones. */
+function rawFormVariants(form){
+ return [...form.querySelectorAll('.variant-row')].map(row=>({
+  name:String(row.querySelector('[name="variantName"]')?.value||'').trim(),
+  price:Number(row.querySelector('[name="variantPrice"]')?.value)||0
+ }));
+}
+/** Folds what is currently typed in the item form back into the item, so a
+    re-render (adding or removing a variant row) never loses input. */
+function syncVariantDraft(item,form){
+ if(!item||!form) return;
+ const fd=new FormData(form);
+ if(fd.has('name')) item.name=String(fd.get('name')||'').trim()||item.name;
+ if(fd.has('ingredients')) item.ingredients=String(fd.get('ingredients')||'').trim();
+ const rows=rawFormVariants(form);
+ if(rows.length) item.variants=rows;
+ else {
+  const raw=String(fd.get('price')??'').trim();
+  if(raw!=='') item.price=Number(raw)||0;
+ }
 }
 /** Inline field validation shared by the add and edit item forms. */
 function validateItemForm(form){
