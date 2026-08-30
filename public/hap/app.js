@@ -1646,9 +1646,9 @@ function priceModeField(item){
  const cur=currencyOf().primary;
  const rows=draftVariants(item);
  const variantMode=rows.length>0;
- const toggle=`<div class="field"><label>Pricing</label><div class="seg" role="group" aria-label="Pricing mode">
-  <button type="button" class="seg-btn ${variantMode?'':'active'}" aria-pressed="${!variantMode}" data-action="item-price-mode" data-mode="single" data-id="${item.id}">Single price</button>
-  <button type="button" class="seg-btn ${variantMode?'active':''}" aria-pressed="${variantMode}" data-action="item-price-mode" data-mode="variants" data-id="${item.id}">Variants</button>
+ const toggle=`<div class="field"><label>Pricing</label><div class="segment-control" role="group" aria-label="Pricing mode">
+  <button type="button" class="${variantMode?'':'active'}" aria-pressed="${!variantMode}" data-action="item-price-mode" data-mode="single" data-id="${item.id}">Single price</button>
+  <button type="button" class="${variantMode?'active':''}" aria-pressed="${variantMode}" data-action="item-price-mode" data-mode="variants" data-id="${item.id}">Variants</button>
  </div></div>`;
  if(!variantMode){
   return `${toggle}<div class="field"><label>Price (${cur})</label><input name="price" type="number" min="0" step="0.1" value="${item.price}"></div>`;
