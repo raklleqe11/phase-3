@@ -1618,10 +1618,15 @@ function itemDetailsSheet(){
  if(!f) return '';
  const i=f.item, tr=tItem(i);
  const al=itemAllergens(i), di=itemDiets(i), sp=Number(i.spice)||0;
- const approx=approxPrice(i.price);
+ const price=itemPrice(i);
+ const approx=approxPrice(price);
+ const vs=itemVariants(i);
  return sheetShell(escapeHtml(tr.name),escapeHtml(tCategory(f.category)),
   `<div class="detail-sheet">
-   <div class="detail-price-block"><b class="detail-price-main">${menuPrice(i.price)}</b>${approx?`<span class="detail-price-approx">${approx}</span>`:''}</div>
+   ${i.image?`<img class="detail-hero" src="${escapeHtml(i.image)}" alt="${escapeHtml(tr.name)}" loading="lazy">`:`<div class="detail-hero detail-hero-empty" aria-hidden="true">${icon('menu',22)}</div>`}
+   ${vs.length>1
+    ? `<div class="detail-variants">${vs.map(v=>{const ap=approxPrice(v.price); return `<div class="detail-variant"><span>${escapeHtml(v.name)}</span><b>${menuPrice(v.price)}${ap?`<small>${ap}</small>`:''}</b></div>`;}).join('')}</div>`
+    : `<div class="detail-price-block"><b class="detail-price-main">${menuPrice(price)}</b>${approx?`<span class="detail-price-approx">${approx}</span>`:''}</div>`}
    ${tr.ingredients?`<p class="detail-ingredients">${escapeHtml(tr.ingredients)}</p>`:''}
    ${di.length||sp>0?`<div class="detail-tags">${di.map(d=>`<span class="detail-tag">${escapeHtml((DIETS.find(x=>x[0]===d)||[,d])[1])}</span>`).join('')}${sp>0?`<span class="detail-tag hot">${escapeHtml(SPICE_LABELS[sp]||'Spicy')}</span>`:''}</div>`:''}
    <div class="detail-block">
