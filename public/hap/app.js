@@ -2,6 +2,7 @@
 (() => {
 'use strict';
 const STORAGE_KEY = 'hapPrototypeV4';
+const GUEST_KEY = 'hap.guest.v1';
 const app = document.getElementById('app');
 const toastLayer = document.getElementById('toast-layer');
 
