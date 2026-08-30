@@ -1182,7 +1182,8 @@ function adminPromote(){
  prunePromotions();
  const list=getPromotions();
  const itemCount=list.filter(x=>x.kind==='item').length;
- return `<div class="page-head"><div><div class="eyebrow">Attention without noise</div><h1 class="page-title">Promote</h1><p class="page-subtitle">${list.length?`${list.length} live`:'Nothing live right now'}</p></div><button class="icon-btn" data-action="promo-chooser" aria-label="New promotion">${icon('plus',20)}</button></div>
+ return `<div class="page-head"><div><div class="eyebrow">Attention without noise</div><h1 class="page-title">Promote</h1><p class="page-subtitle">${list.length?`${list.length} live`:'Nothing live right now'}</p></div></div>
+ <button class="btn primary full" style="margin-bottom:12px" data-action="promo-chooser">${icon('plus',16)} New promotion</button>
  ${itemCount>3?`<div class="promo-warn">${itemCount} promotions active — the menu stops feeling special.</div>`:''}
  ${list.length?`<div class="promo-manager">${list.map(row=>row.kind==='item'
   ? `<div class="card promo-row"><img src="${row.item.image}" alt="${escapeHtml(row.item.name)}"><div class="promo-row-copy"><strong>${escapeHtml(row.item.name)}</strong><span>${escapeHtml(row.promotion.label||'Promoted')} · ${escapeHtml(promoStyleName(row.promotion.style))} · ${escapeHtml(promoEndsLabel(row.promotion))}</span></div><div class="promo-row-actions"><button class="btn small soft" data-action="promote-item" data-id="${row.item.id}">Edit</button><button class="btn small" data-action="end-promotion" data-kind="item" data-id="${row.item.id}">End</button></div></div>`
