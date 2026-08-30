@@ -1902,8 +1902,8 @@ app.addEventListener('click',e=>{
   if(btn.dataset.mode==='variants'){ if(!hasVariants(f.item)) f.item.variants=[{name:'Small',price:itemPrice(f.item)||0},{name:'Large',price:Math.round((itemPrice(f.item)||0)*1.4)}]; }
   else { f.item.price=itemPrice(f.item); f.item.variants=[]; }
   save(); render(); return; }
- if(a==='variant-add'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); f.item.variants=[...itemVariants(f.item),{name:'',price:0}]; save(); render(); return; }
- if(a==='variant-remove'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); const idx=Number(btn.dataset.idx); const list=itemVariants(f.item).filter((_,i)=>i!==idx); f.item.variants=list; if(!list.length) f.item.price=itemPrice(f.item); save(); render(); return; }
+ if(a==='variant-add'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); f.item.variants=[...draftVariants(f.item),{name:'',price:0}]; save(); render(); return; }
+ if(a==='variant-remove'){ const f=getItem(btn.dataset.id); if(!f) return; const form=document.getElementById('edit-item-form'); if(form) syncVariantDraft(f.item,form); const idx=Number(btn.dataset.idx); const list=draftVariants(f.item).filter((_,i)=>i!==idx); f.item.variants=list; if(!list.length) f.item.price=itemPrice(f.item); save(); render(); return; }
  if(a==='save-add-item'){ saveAddItemForm(); return; }
  if(a==='save-add-category'){ saveAddCategoryForm(); return; }
  if(a==='end-promotion'){ endPromotion(btn.dataset.kind||'item',btn.dataset.id); return; }
