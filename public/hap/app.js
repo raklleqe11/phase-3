@@ -1779,6 +1779,7 @@ function renderConfirmModal(){
 
 function postRender(){
  document.documentElement.style.setProperty('--brand',state.appearance.brand);
+ restoreScroll();
  if(ui.sheet || ui.modal || ui.confirm){
   const overlay = document.querySelector('.sheet, .special-modal, .confirm-modal');
   if(overlay){
