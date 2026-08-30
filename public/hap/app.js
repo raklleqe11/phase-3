@@ -1734,7 +1734,9 @@ function bulkAvailabilitySheet(){
 function bulkPriceSheet(){
  const cur=currencyOf().primary;
  return sheetShell('Update prices',`Every dish in ${escapeHtml(cur)}. Changes save as you go.`,`
- <div class="bulk-list">${allItems().map(i=>`<div class="bulk-row static"><img src="${i.image}" alt=""><div class="bulk-copy"><strong>${escapeHtml(i.name)}</strong><span>${escapeHtml(cur)}</span></div><input class="bulk-price" type="number" step="0.01" min="0" value="${escapeHtml(String(i.price))}" data-action="bulk-price-input" data-id="${i.id}" aria-label="Price for ${escapeHtml(i.name)}"></div>`).join('')}</div>
+ <div class="bulk-list">${allItems().map(i=>`<div class="bulk-row static"><img src="${i.image}" alt="${escapeHtml(i.name)}"><div class="bulk-copy"><strong>${escapeHtml(i.name)}</strong><span>${hasVariants(i)?`${itemVariants(i).length} variants`:escapeHtml(cur)}</span></div>${hasVariants(i)
+  ? `<span class="bulk-variant-note">${itemPriceLabel(i)}</span>`
+  : `<input class="bulk-price" type="number" step="0.01" min="0" value="${escapeHtml(String(i.price))}" data-action="bulk-price-input" data-id="${i.id}" aria-label="Price for ${escapeHtml(i.name)}">`}</div>`).join('')}</div>
  <button class="btn primary full" style="margin-top:12px" data-action="close-sheet">Done</button>`);
 }
 function itemActionsSheet(){
