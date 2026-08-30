@@ -1055,10 +1055,27 @@ function landingPage(){
 }
 
 
+/* A render replaces the scroll containers, which would otherwise reset the
+   guest or owner to the top of the page on every tap. The offsets are captured
+   before the rebuild and restored right after it. */
+let scrollMemory={page:0,sheet:0};
+function captureScroll(){
+ scrollMemory={
+  page:document.querySelector('.content-scroll')?.scrollTop||0,
+  sheet:document.querySelector('.sheet')?.scrollTop||0
+ };
+}
+function restoreScroll(){
+ const page=document.querySelector('.content-scroll');
+ if(page&&scrollMemory.page) page.scrollTop=scrollMemory.page;
+ const sheet=document.querySelector('.sheet');
+ if(sheet&&scrollMemory.sheet) sheet.scrollTop=scrollMemory.sheet;
+}
 function render(){
  prunePromotions();
  setTheme();
  stopLandingDemo();
+ captureScroll();
  if(PUBLIC_CTX){
   const body = renderPreview();
   app.innerHTML=`<div class="app-stage"><div class="phone-app">${body}${renderOverlays()}</div></div>`;
