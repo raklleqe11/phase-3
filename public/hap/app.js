@@ -2006,6 +2006,29 @@ function formVariants(form){
   price:Number(row.querySelector('[name="variantPrice"]')?.value)||0
  }));
 }
+/** Every variant row as typed, including rows still missing a name. */
+function draftVariants(i){ return Array.isArray(i&&i.variants)?i.variants.filter(v=>v&&typeof v==='object'):[]; }
+/** Reads the raw variant rows without inventing names for blank ones. */
+function rawFormVariants(form){
+ return [...form.querySelectorAll('.variant-row')].map(row=>({
+  name:String(row.querySelector('[name="variantName"]')?.value||'').trim(),
+  price:Number(row.querySelector('[name="variantPrice"]')?.value)||0
+ }));
+}
+/** Folds what is currently typed in the item form back into the item, so a
+    re-render (adding or removing a variant row) never loses input. */
+function syncVariantDraft(item,form){
+ if(!item||!form) return;
+ const fd=new FormData(form);
+ if(fd.has('name')) item.name=String(fd.get('name')||'').trim()||item.name;
+ if(fd.has('ingredients')) item.ingredients=String(fd.get('ingredients')||'').trim();
+ const rows=rawFormVariants(form);
+ if(rows.length) item.variants=rows;
+ else {
+  const raw=String(fd.get('price')??'').trim();
+  if(raw!=='') item.price=Number(raw)||0;
+ }
+}
 /** Inline field validation shared by the add and edit item forms. */
 function validateItemForm(form){
  clearFieldErrors(form);
