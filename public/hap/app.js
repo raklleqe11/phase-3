@@ -1527,10 +1527,13 @@ function renderPublicItem(i,c,idx,opts){
   style==='editorial'?`<span class="promo-kicker-line">${label}</span>`:
   style==='offer'?`<span class="promo-strip-label">${label}</span>`:
   `<span class="promo-notch">${label}</span>`;
- const footer=promoted&&style==='offer'
-  ? `<div class="promo-offer-strip"><span class="offer-terms">${p.terms?`Offer includes · ${escapeHtml(p.terms)}`:'Offer available now'}</span><span class="offer-price">${p.wasPrice?`<s>${money(Number(p.wasPrice))}</s>`:''}<strong>${menuPrice(i.price)}</strong></span></div>`
+ /* The offer style prints the price inside its own strip, so the card must not
+    also render the price column — one price per card, never two. */
+ const isOffer=promoted&&style==='offer';
+ const footer=isOffer
+  ? `<div class="promo-offer-strip"><span class="offer-terms">${p.terms?`Offer includes · ${escapeHtml(p.terms)}`:'Offer available now'}</span><span class="offer-price">${p.wasPrice?`<s>${money(Number(p.wasPrice))}</s>`:''}<strong>${menuPrice(itemPrice(i))}</strong>${itemVariants(i).length>1?'<em class="offer-from">from</em>':''}</span></div>`
   : '';
- return `<article class="menu-product reveal-item ${promoted?`is-promoted promo-${p.intensity||'subtle'} promo-style-${style}`:''} ${i.status==='hidden'?'hidden-item':''}" data-item-id="${i.id}" data-search="${escapeHtml((tr.name+' '+ing+' '+tCategory(c)).toLowerCase())}" style="transition-delay:${Math.min(idx%5*35,140)}ms">${chrome}<img class="product-img" src="${i.image}" alt="${escapeHtml(tr.name)}" loading="lazy"><div class="product-copy"><h3>${escapeHtml(tr.name)}</h3>${ing?`<p>${escapeHtml(ing)}</p>`:''}${itemBadges(i,{interactive:!opts||!opts.static})}</div>${priceColumn(i,{showWas:style!=='offer'})}${footer}${i.status==='soldout'?`<div class="product-status">Sold out</div>`:''}</article>`;
+ return `<article class="menu-product reveal-item ${promoted?`is-promoted promo-${p.intensity||'subtle'} promo-style-${style}`:''} ${i.status==='hidden'?'hidden-item':''}" data-item-id="${i.id}" data-search="${escapeHtml((tr.name+' '+ing+' '+tCategory(c)).toLowerCase())}" style="transition-delay:${Math.min(idx%5*35,140)}ms">${chrome}<img class="product-img" src="${i.image}" alt="${escapeHtml(tr.name)}" loading="lazy"><div class="product-copy"><h3>${escapeHtml(tr.name)}</h3>${ing?`<p>${escapeHtml(ing)}</p>`:''}${itemBadges(i,{interactive:!opts||!opts.static})}</div>${isOffer?'':priceColumn(i)}${footer}${i.status==='soldout'?`<div class="product-status">Sold out</div>`:''}</article>`;
 }
 
 
