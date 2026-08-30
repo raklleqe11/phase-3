@@ -1158,7 +1158,7 @@ function renderAdminCategory(c){
 function renderAdminItem(i,c){
  const statusLabel=i.status==='available'?'Available':i.status==='soldout'?'Sold out':'Hidden';
  const promoted=isPromoLive(i.promotion);
- return `<div class="admin-item ${i.status==='soldout'?'is-soldout':''}"><img class="admin-item-img" src="${i.image}" alt=""><div class="admin-item-copy"><strong>${escapeHtml(i.name)}${promoted?'<i class="promo-dot" aria-label="Promoted"></i>':''}</strong><span><i class="status-dot ${i.status}"></i>${statusLabel} · ${money(i.price)}</span></div><button class="mini-icon" data-tour="promote" data-action="item-actions" data-id="${i.id}" aria-label="Actions for ${escapeHtml(i.name)}">${icon('more',16)}</button></div>`;
+ return `<div class="admin-item ${i.status==='soldout'?'is-soldout':''}"><img class="admin-item-img" src="${i.image}" alt=""><div class="admin-item-copy"><strong>${escapeHtml(i.name)}${promoted?'<i class="promo-dot" aria-label="Promoted"></i>':''}</strong><span><i class="status-dot ${i.status}"></i>${statusLabel} · ${itemPriceLabel(i)}</span></div><button class="mini-icon" data-tour="promote" data-action="item-actions" data-id="${i.id}" aria-label="Actions for ${escapeHtml(i.name)}">${icon('more',16)}</button></div>`;
 }
 /* One promotions surface: everything live, with edit and end on each row. */
 function adminPromote(){
@@ -1722,7 +1722,7 @@ function promoteCategorySheet(){
 }
 function promoChooserSheet(){
  return sheetShell('New promotion','Feature one dish, or a whole section.',`
- <div class="sheet-section"><div class="sheet-label">Promote a dish</div><div class="settings-list">${allItems().map(i=>`<button class="card settings-row" data-action="promote-item" data-id="${i.id}"><div class="settings-icon">${icon('spark',17)}</div><div class="settings-copy"><strong>${escapeHtml(i.name)}</strong><span>${money(i.price)}${isPromoLive(i.promotion)?' · already promoted':''}</span></div>${icon('chevron',15)}</button>`).join('')}</div></div>
+ <div class="sheet-section"><div class="sheet-label">Promote a dish</div><div class="settings-list">${allItems().map(i=>`<button class="card settings-row" data-action="promote-item" data-id="${i.id}"><div class="settings-icon">${icon('spark',17)}</div><div class="settings-copy"><strong>${escapeHtml(i.name)}</strong><span>${itemPriceLabel(i)}${isPromoLive(i.promotion)?' · already promoted':''}</span></div>${icon('chevron',15)}</button>`).join('')}</div></div>
  <div class="sheet-section"><div class="sheet-label">Promote a category</div><div class="settings-list">${state.categories.map(c=>`<button class="card settings-row" data-action="promote-category" data-id="${c.id}"><div class="settings-icon">${icon('menu',17)}</div><div class="settings-copy"><strong>${escapeHtml(c.name)}</strong><span>${c.items.length} items${isPromotedCategory(c)?' · already featured':''}</span></div>${icon('chevron',15)}</button>`).join('')}</div></div>`);
 }
 function bulkAvailabilitySheet(){
@@ -1741,7 +1741,7 @@ function itemActionsSheet(){
  const f=getItem(ui.sheetData?.id); if(!f) return '';
  const i=f.item;
  const rows=[['edit-item','Edit',icon('edit',17)],['cycle-status','Availability',icon('eyeOff',17)],['promote-item','Promote',icon('spark',17)],['move-item-up','Move up',icon('up',17)],['move-item-down','Move down',icon('down',17)]];
- return sheetShell(escapeHtml(i.name),`${escapeHtml(f.category.name)} · ${money(i.price)}`,`
+ return sheetShell(escapeHtml(i.name),`${escapeHtml(f.category.name)} · ${itemPriceLabel(i)}`,`
  <div class="settings-list">${rows.map(([a,n,ic])=>`<button class="card settings-row" data-action="${a}" data-id="${i.id}" data-dir="${a==='move-item-up'?'up':'down'}"><div class="settings-icon">${ic}</div><div class="settings-copy"><strong>${n}</strong></div>${icon('chevron',15)}</button>`).join('')}
  <button class="card settings-row" data-action="delete-item" data-id="${i.id}"><div class="settings-icon">${icon('trash',17)}</div><div class="settings-copy"><strong style="color:var(--danger)">Delete</strong></div></button></div>`);
 }
